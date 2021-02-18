@@ -4,20 +4,25 @@
 int main()
 {
     std::cout << "Creating Graph" << std::endl;
-    Vertex v1("room");
-    Vertex v2("room");
-    v1.create_edge(v2);
-    v1.delete_edge(v2);
 
     Graph graph;
-    graph.add_vertex(v1);
-    graph.add_vertex(v2);
 
+    Vertex* old;
+    for(int i=0; i<1000000; i++){
+        Vertex v("room");
+        graph.add_vertex(v);
+        if(old){
+            v.create_edge(*old);
+        }
+        old = &v;
+    }
+    
     graph.start_computation();
-    std::cout << "running first itteration" << std::endl;
+    std::cout << "running iteration"<<std::endl;
     graph.run_iteration();
-    std::cout << "running second itteration" << std::endl;
+    std::cout << "running iteration"<<std::endl;
     graph.run_iteration();
+    std::cout << "shutting down" << std::endl;
     graph.stop_computation();
     return 0;
 }

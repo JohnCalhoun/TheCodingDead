@@ -12,37 +12,33 @@ class Graph {
     std::vector<std::unique_ptr<Vertex> > _vertexs; 
     std::vector<std::thread>            _threads;
     std::atomic_bool                    _terminated;
-    std::deque<Vertex*>                 _tasks;
+    std::vector<Vertex*>                 _tasks;
     std::mutex                          _task_mutex;
     std::condition_variable             _cv;
     std::condition_variable             _cv_finished;
     std::mutex                          _finished_tasks_mutex;
     std::atomic_uint                    _finished_tasks;
-    void _thread(){
-        while(true){
-            auto vertex = _get_task();
-            if(!vertex)
-                return;
-            vertex->update();
-            std::lock_guard lock(_finished_tasks_mutex);
-            _finished_tasks++;
-            _cv_finished.notify_all();
+    std::vector<Vertex*>::iterator      _vertex_ptr;
+
+    void _thread(int i, int threads){
+        while(true){    
+            {
+                std::unique_lock lock(_task_mutex);
+                _cv.wait(lock);
+            }
+            if(_terminated){
+                break;
+            }
+            for(auto it= _vertexs.begin() + i; it < _vertexs.end(); it+=threads){
+                (*it)->update();
+                _finished_tasks++;
+            }
         }
-    }
-    Vertex* _get_task(){    
-        std::unique_lock lock(_task_mutex);
-        while (_tasks.empty()){
-            if (_terminated)
-                return nullptr;
-            _cv.wait_for(lock, std::chrono::milliseconds(10));
-        }
-        auto rtn = std::move(_tasks.front());
-        _tasks.pop_front();
-        return rtn;
     }
 
     public: 
-    Graph(): _terminated(false){};
+    Graph(): _terminated(false){
+    };
 
     void add_vertex(Vertex &vertex){
         auto temp = std::make_unique<Vertex>(vertex);
@@ -50,23 +46,24 @@ class Graph {
     }
 
     void start_computation(){
-        std::cout << "starting " << std::thread::hardware_concurrency() << " threads" << std::endl;
-        for (size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
-            _threads.push_back(std::thread(std::bind(&Graph::_thread, this)));
-    }
-    void run_iteration(){   
-        _finished_tasks = 0;
-        int _total_tasks = 0;
-        {
-            std::unique_lock lock(_task_mutex);
-            for (auto i = std::begin(_vertexs); i != std::end(_vertexs); ++i){
-                _total_tasks++;
-                _tasks.push_back((*i).get());
-                _cv.notify_one();
-            }
+        int threads = std::thread::hardware_concurrency();
+        std::cout << "starting " << threads << " threads" << std::endl;
+        for (size_t i = 0; i < threads; ++i){
+            _threads.push_back(std::thread(std::bind(&Graph::_thread, this, i, threads)));
         }
-        std::unique_lock lock(_finished_tasks_mutex);
-        _cv_finished.wait(lock,[_total_tasks,this]{ return _total_tasks == this->_finished_tasks; });
+    }
+    void run_iteration(){  
+        auto start_t = std::chrono::high_resolution_clock::now();
+        _finished_tasks = 0;
+        int _total_tasks = _vertexs.size();
+        
+        _cv.notify_all();
+        while( _total_tasks != _finished_tasks ){
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        auto stop_t = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop_t - start_t);
+        std::cout << "iteration duration: " << duration.count()/1000000.0 << std::endl; 
     }
     void stop_computation(){
         _terminated = true;
