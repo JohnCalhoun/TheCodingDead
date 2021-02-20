@@ -3,10 +3,14 @@
 #include <mutex>
 #include <iostream>
 #include <string>
+#include <utility>
 
 class Vertex {
     public:
-    const std::string label;
+    typedef int output_value;
+    typedef std::string output_key;
+    typedef std::pair<output_key, output_value> output;
+    std::string label;
 
     private:
     std::vector<Vertex*> edges;
@@ -34,7 +38,7 @@ class Vertex {
         this->remove_edge(vertex);
         vertex.remove_edge(*this);
     }
-    void update(){
+    std::vector<output>  update(){
         std::lock_guard<std::mutex> guard(this->edge_mutex);
         std::move(edges_to_add.begin(), edges_to_add.end(), std::back_inserter(edges));
       
@@ -46,10 +50,14 @@ class Vertex {
         }
         edges_to_add.clear();
         edges_to_remove.clear();
+        std::vector<output> out = {output(label, 1)};
+        return out;
+
     }
     Vertex(const Vertex &other){
-        this->edges = std::vector(other.edges);
+        edges = std::vector(other.edges);
+        label = other.label;
     }
 
-    Vertex(std::string label): label(label){}
+    Vertex(std::string label_name): label(label_name){}
 };
