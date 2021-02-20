@@ -1,4 +1,4 @@
-COMPILE_OPTS = -lstdc++ -std=c++17
+COMPILE_OPTS = -lstdc++ -std=c++17 
 
 all : run 
 

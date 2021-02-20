@@ -1,22 +1,13 @@
 #include <iostream>
 #include "graph.hpp"
+#include <string>
 
-int main()
+int main(int argc, char *argv[])
 {
-    std::cout << "Creating Graph" << std::endl;
-
+    std::cout << "loading Graph" << std::endl;
     Graph graph;
+    graph.load(argv[1]);
 
-    Vertex* old;
-    for(int i=0; i<1000000; i++){
-        Vertex v("room");
-        graph.add_vertex(v);
-        if(old){
-            v.create_edge(*old);
-        }
-        old = &v;
-    }
-    
     graph.start_computation();
     std::cout << "running iteration"<<std::endl;
     graph.run_iteration();
