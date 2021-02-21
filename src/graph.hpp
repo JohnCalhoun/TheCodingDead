@@ -1,40 +1,43 @@
-#include "vertex.hpp"
 #include "edge.hpp"
-#include <vector>
-#include <memory>
-#include <chrono>
-#include <thread>
+#include "vertex.hpp"
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <deque>
 #include <filesystem>
-#include <iostream>
-#include <sstream>
 #include <fstream>
+#include <iostream>
 #include <map>
+#include <memory>
+#include <random>
+#include <sstream>
 #include <string>
+#include <thread>
+#include <vector>
+#include <boost/log/trivial.hpp>
+
+using namespace std;
 
 class Graph {
     private:
-    typedef std::map<Vertex::output_key, Vertex::output_value> output_container;    
-    std::vector<std::unique_ptr<Vertex> > _vertexs; 
-    std::vector<std::thread>            _threads;
-    std::atomic_bool                    _terminated;
-    std::vector<Vertex*>                 _tasks;
-    std::mutex                          _task_mutex;
-    std::condition_variable             _cv;
-    std::condition_variable             _cv_finished;
-    std::mutex                          _finished_tasks_mutex;
-    std::atomic_uint                    _finished_tasks;
-    std::vector<Vertex*>::iterator      _vertex_ptr;
-    std::vector<output_container*>      _outputs;
-    int                                 _num_of_threads;
-    std::string                         _output_dir;
+    typedef map<Vertex::output_key, Vertex::output_value> output_container;    
 
-    std::vector<std::string> _parse_line(std::string line){
-        std::vector<std::string> args;
-        std::string arg;
-        std::istringstream linestream(line);
-        while(std::getline(linestream, arg, ',')){
+    atomic_bool                     _terminated;
+    atomic_uint                     _finished_tasks;
+    condition_variable              _cv;
+    int                             _num_of_threads;
+    mutex                           _task_mutex;
+    vector<thread>                  _threads;
+
+    string                          _output_dir;
+    vector<output_container>        _outputs;
+    vector<unique_ptr<Vertex> >     _vertexs; 
+
+    vector<string> _parse_line(string line){
+        vector<string> args;
+        string arg;
+        istringstream linestream(line);
+        while(getline(linestream, arg, ',')){
             args.push_back(arg);
         }
         return args;
@@ -43,16 +46,16 @@ class Graph {
     void _thread(int i, int threads){
         while(true){    
             {
-                std::unique_lock lock(_task_mutex);
+                unique_lock lock(_task_mutex);
                 _cv.wait(lock);
             }
             if(_terminated){
                 break;
             }
             for(auto it= _vertexs.begin() + i; it < _vertexs.end(); it+=threads){
-                std::vector<Vertex::output> out = (*it)->update();
+                vector<Vertex::output> out = (*it)->update();
                 for(auto x: out){
-                    (*_outputs[i])[x.first] += x.second;
+                    _outputs[i][x.first] += x.second;
                 }
                 _finished_tasks++;
             }
@@ -60,106 +63,106 @@ class Graph {
     }
 
     public: 
-    Graph(std::string output_dir): _terminated(false), _output_dir(output_dir){
-        _num_of_threads = std::thread::hardware_concurrency();
-    };
+    Graph(string output_dir): 
+        _terminated(false), 
+        _output_dir(output_dir),
+        _num_of_threads(thread::hardware_concurrency()){};
 
-    void add_vertex(Vertex &vertex){
-        auto temp = std::make_unique<Vertex>(vertex);
-        this->_vertexs.push_back(std::move(temp));
+    void add_vertex(Vertex::ptr vertex_ptr){
+        this->_vertexs.emplace_back(vertex_ptr);
     }
 
     void start_computation(){
-        std::cout << "starting " << _num_of_threads << " threads" << std::endl;
+        BOOST_LOG_TRIVIAL(debug) << "starting " << _num_of_threads << " threads"; 
         for (size_t i = 0; i < _num_of_threads; ++i){
-            _threads.push_back(std::thread(std::bind(&Graph::_thread, this, i, _num_of_threads)));
-            _outputs.push_back(new output_container);
+            _threads.push_back(thread(bind(&Graph::_thread, this, i, _num_of_threads)));
+            _outputs.emplace_back();
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        this_thread::sleep_for(chrono::milliseconds(500));
     }
     void run_iteration(int iteration_number){  
-        auto start_t = std::chrono::high_resolution_clock::now();
+        auto start_t = chrono::high_resolution_clock::now();
         _finished_tasks = 0;
         int _total_tasks = _vertexs.size();
         
         _cv.notify_all();
         while( _total_tasks != _finished_tasks ){
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            this_thread::sleep_for(chrono::nanoseconds(500));
         }
         
         output_container final_output;
         for(int i=0; i<_outputs.size(); ++i){
-            for(std::pair<Vertex::output_key, Vertex::output_value> x: *_outputs[i]){
+            for(pair<Vertex::output_key, Vertex::output_value> x: _outputs[i]){
                 final_output[x.first] += x.second;
             }
-            delete _outputs[i];
-            _outputs[i] = new output_container;
+            _outputs[i].clear();
         }
-        std::ostringstream output_file_name;
+        ostringstream output_file_name;
         output_file_name << _output_dir << "/" << iteration_number << ".csv";
-        std::ofstream output_file{output_file_name.str()};
-        for(std::pair<Vertex::output_key, Vertex::output_value> x: final_output){
-            output_file << x.first << "," << x.second << std::endl;
+        ofstream output_file{output_file_name.str()};
+        for(pair<Vertex::output_key, Vertex::output_value> x: final_output){
+            output_file << x.first << "," << x.second << endl;
         }
         output_file.close();
 
-        auto stop_t = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop_t - start_t);
-        std::cout << "iteration duration: " << duration.count()/1000000.0 << std::endl; 
+        auto stop_t = chrono::high_resolution_clock::now();
+        auto duration = chrono::duration_cast<chrono::microseconds>(stop_t - start_t);
+        BOOST_LOG_TRIVIAL(debug) << "Iteration " << iteration_number << " Duration: " << duration.count()/1000000.0; 
     }
     void stop_computation(){
         _terminated = true;
         _cv.notify_all();
         for (auto& th : _threads) th.join();
-        for (size_t i = 0; i < _num_of_threads; ++i){
-            delete _outputs[i];
-        }
     }
 
-    void load(std::string load_dir){
-        auto start_t = std::chrono::high_resolution_clock::now();
-        std::fstream stream;
-        std::vector<std::string> vertex_files;
-        std::vector<std::string> edge_files;
+    void load(string load_dir){
+        auto start_t = chrono::high_resolution_clock::now();
+        fstream stream;
+        vector<string> vertex_files;
+        vector<string> edge_files;
 
 
-        for(auto& p: std::filesystem::directory_iterator(load_dir)){
-            std::size_t found_edge = p.path().filename().string().find("edge");
-            if (found_edge!=std::string::npos)
+        for(auto& p: filesystem::directory_iterator(load_dir)){
+            size_t found_edge = p.path().filename().string().find("edge");
+            if (found_edge!=string::npos)
                 edge_files.push_back(p.path());
             
-            std::size_t found_vertex = p.path().filename().string().find("vertex");
-            if (found_vertex!=std::string::npos)
+            size_t found_vertex = p.path().filename().string().find("vertex");
+            if (found_vertex!=string::npos)
                 vertex_files.push_back(p.path());
         }
+        BOOST_LOG_TRIVIAL(debug) << "Loading Graph Definition from: " << load_dir;
 
-        std::map<std::string, Vertex*> vertexs_tmp;
+        map<string, Vertex::ptr> vertexs_tmp;
         for(auto vertex_file: vertex_files){
-            std::cout<<"loading " << vertex_file << std::endl;
+            BOOST_LOG_TRIVIAL(debug) << "Loading Vertex File: " << vertex_file;
             stream.open(vertex_file);
-            std::string line;
-            while(std::getline(stream,line)){    
+            string line;
+            while(getline(stream,line)){    
                 auto args = _parse_line(line);
-                vertexs_tmp[args[0]] = new Vertex(args[1]);
+                Vertex::ptr new_vertex =new Vertex(args[1]);
+                vertexs_tmp[args[0]] = new_vertex;
+                add_vertex(new_vertex);
             }
             stream.close();
         }
-        std::cout << "loaded " << vertexs_tmp.size() << " vertexs " << std::endl;
         for(auto edge_file: edge_files){
-            std::cout<<"loading " << edge_file << std::endl;
+            BOOST_LOG_TRIVIAL(debug) << "Loading Edge File: " << edge_file;
             stream.open(edge_file);
-            std::string line;
-            while(std::getline(stream,line)){    
+            string line;
+            while(getline(stream,line)){    
                 auto args = _parse_line(line);
-                vertexs_tmp[args[0]]->create_edge(*vertexs_tmp[args[1]]);
+                vertexs_tmp.at(args[0])->create_edge_to(vertexs_tmp.at(args[1]));
             }
             stream.close();
         }
-        for(auto v: vertexs_tmp){
-            add_vertex(*v.second);
-        }
-        auto stop_t = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop_t - start_t);
-        std::cout << "loading duration: " << duration.count()/1000000.0 << std::endl; 
+        
+        random_device rd;
+        mt19937 g(rd());
+        
+        shuffle(_vertexs.begin(), _vertexs.end(), g);
+        auto stop_t = chrono::high_resolution_clock::now();
+        auto duration = chrono::duration_cast<chrono::microseconds>(stop_t - start_t);
+        BOOST_LOG_TRIVIAL(debug) << "Loading Duration: " << duration.count()/1000000.0; 
     }
 };
