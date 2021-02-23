@@ -12,8 +12,9 @@ class Room : public Vertex {
     const float _height;
 
     public:
-    vector<Vertex::output>  _update();
-    Room(float width, float height): Vertex("Room"), _width(width), _height(height){};
+    vector<output> interact(map<string, vector<ptr> > others);
+    vector<Vertex::output>  simulate();
+    Room(string id, float width, float height);
 };
 
 #endif

@@ -8,7 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <map>
+#include <unordered_map>
 #include <memory>
 #include <random>
 #include <sstream>
@@ -18,10 +18,9 @@
 #include <boost/log/trivial.hpp>
 #include <stdexcept>
 #include <boost/json.hpp>
-
+#include <boost/timer/timer.hpp>
 #include "graph.hpp"
 using namespace std;
-
 
 void Graph::_thread(int i, int threads){
     while(true){    
@@ -33,9 +32,13 @@ void Graph::_thread(int i, int threads){
             break;
         }
         for(auto it= _vertexs.begin() + i; it < _vertexs.end(); it+=threads){
-            vector<Vertex::output> out = (*it)->update();
-            for(auto x: out){
-                _outputs[i][x.first] += x.second;
+            if(_phase == "update"){
+                (*it)->update();
+            }else if(_phase == "simulate"){
+                vector<Vertex::output> out = (*it)->simulate();
+                for(auto x: out){
+                    _outputs[i][x.first] += x.second;
+                }
             }
             _finished_tasks++;
         }
@@ -54,15 +57,21 @@ void Graph::start_computation(){
     }
     this_thread::sleep_for(chrono::milliseconds(500));
 }
-void Graph::run_iteration(int iteration_number){  
-    auto start_t = chrono::high_resolution_clock::now();
+void Graph::_run_phase(string phase){
+    BOOST_LOG_TRIVIAL(debug) << "starting phase: " << phase; 
+    _phase=phase;
     _finished_tasks = 0;
     int _total_tasks = _vertexs.size();
-    
+
     _cv.notify_all();
     while( _total_tasks != _finished_tasks ){
         this_thread::sleep_for(chrono::nanoseconds(500));
     }
+}
+void Graph::run_iteration(int iteration_number){  
+    boost::timer::auto_cpu_timer t("Iteration duration: %ws wall, %us user + %ss system = %ts CPU (%p%)\n");
+    _run_phase("update");
+    _run_phase("simulate");
     
     output_container final_output;
     for(int i=0; i<_outputs.size(); ++i){
@@ -75,22 +84,29 @@ void Graph::run_iteration(int iteration_number){
     output_file_name << _output_dir << "/" << iteration_number << ".csv";
     ofstream output_file{output_file_name.str()};
     for(pair<Vertex::output_key, Vertex::output_value> x: final_output){
+        _output_keys.insert(x.first);
         output_file << x.first << "," << x.second << endl;
     }
     output_file.close();
-
-    auto stop_t = chrono::high_resolution_clock::now();
-    auto duration = chrono::duration_cast<chrono::microseconds>(stop_t - start_t);
-    BOOST_LOG_TRIVIAL(debug) << "Iteration " << iteration_number << " Duration: " << duration.count()/1000000.0; 
 }
+
 void Graph::stop_computation(){
     _terminated = true;
     _cv.notify_all();
     for (auto& th : _threads) th.join();
+
+    ostringstream output_key_file_name;
+    output_key_file_name << _output_dir << "/" << "keys.csv";
+
+    ofstream output_file{output_key_file_name.str()};
+    for(Vertex::output_key x: _output_keys){
+        output_file << x << endl;
+    }
+    output_file.close();
 }
 
 void Graph::load(string load_dir){
-    auto start_t = chrono::high_resolution_clock::now();
+    boost::timer::auto_cpu_timer t("Loading duration: %ws wall, %us user + %ss system = %ts CPU (%p%)\n");
     fstream stream;
     vector<string> vertex_files;
     vector<string> edge_files;
@@ -107,7 +123,7 @@ void Graph::load(string load_dir){
     }
     BOOST_LOG_TRIVIAL(debug) << "Loading Graph Definition from: " << load_dir;
 
-    map<boost::json::string, Vertex::ptr> vertexs_tmp;
+    unordered_map<boost::json::string, Vertex::ptr> vertexs_tmp;
     for(auto vertex_file: vertex_files){
         BOOST_LOG_TRIVIAL(debug) << "Loading Vertex File: " << vertex_file;
         stream.open(vertex_file);
@@ -121,11 +137,14 @@ void Graph::load(string load_dir){
                 boost::json::string type = args.at("type").as_string();
                 if(type == "room"){
                     new_vertex =new Room(
+                        args.at("id").as_string().data(),
                         args.at("width").as_double(), 
                         args.at("height").as_double()
                     );
                 }else if(type == "person"){
-                    new_vertex =new Person();
+                    new_vertex =new Person(
+                        args.at("id").as_string().data()
+                    );
                 }else{
                     BOOST_LOG_TRIVIAL(fatal) << "unknow vertex type: "<< type;
                     throw runtime_error("InvalidVertexDefinition"); 
@@ -168,7 +187,10 @@ void Graph::load(string load_dir){
     mt19937 g(rd());
     
     shuffle(_vertexs.begin(), _vertexs.end(), g);
-    auto stop_t = chrono::high_resolution_clock::now();
-    auto duration = chrono::duration_cast<chrono::microseconds>(stop_t - start_t);
-    BOOST_LOG_TRIVIAL(debug) << "Loading Duration: " << duration.count()/1000000.0; 
 }
+
+Graph::Graph(string output_dir): 
+    _terminated(false), 
+    _num_of_threads(thread::hardware_concurrency()),
+    _output_dir(output_dir){};
+

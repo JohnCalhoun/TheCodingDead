@@ -34,6 +34,10 @@ vector<Vertex::output> Vertex::_update(){
     return vector<Vertex::output>();
 };
 
+vector<Vertex::output> Vertex::interact(map<string, vector<ptr> > others){
+    return vector<Vertex::output>();
+};
+
 void Vertex::create_edge_to(ptr vertex_ptr){
     add_edge(vertex_ptr);
     vertex_ptr->add_edge(this);
@@ -44,7 +48,11 @@ void Vertex::delete_edge_to(ptr vertex_ptr){
     vertex_ptr->remove_edge(this);
 }
 
-vector<Vertex::output>  Vertex::update(){
+void  Vertex::update(){
     _update_edges(); 
-    return _update();
+    _update();
 }
+vector<Vertex::output> Vertex::simulate(){
+    return vector<Vertex::output>();
+}
+Vertex::Vertex(string id, string label_name): id(id), label(label_name){}

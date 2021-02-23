@@ -1,5 +1,5 @@
-#ifndef PERSON_H_INCLUDED 
-#define PERSON_H_INCLUDED
+#ifndef POSITION_H_INCLUDED 
+#define POSITION_H_INCLUDED
 
 #include <vector>
 #include "vertex.hpp"
@@ -7,21 +7,15 @@
 
 using namespace std;
 
-class Person : public Vertex {
+template<typename T>
+class Position {
     private:
-    float _x;
-    float _y;
+    T _x;
+    T _y;
 
     public:
-    vector<output>  _update(){
-        vector<output> out = {output(label, 1)};
-        return out;
-    }
-
-    Person(): Vertex("Person"){
-        _x = (float) rand()/RAND_MAX;
-        _y = (float) rand()/RAND_MAX;
-    }
+    Position(T x, T y): _x(x), _y(y){};
+    Position():_x(0), _y(0){};
 };
 
 #endif

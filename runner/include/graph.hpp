@@ -8,7 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <map>
+#include <unordered_map>
 #include <memory>
 #include <random>
 #include <sstream>
@@ -18,14 +18,16 @@
 #include <boost/log/trivial.hpp>
 #include <stdexcept>
 #include <boost/json.hpp>
-
+#include <unordered_set>
 using namespace std;
 
 class Graph {
     private:
-    typedef map<Vertex::output_key, Vertex::output_value> output_container;    
+    typedef unordered_map<Vertex::output_key, Vertex::output_value> output_container;    
+    typedef unordered_set<Vertex::output_key> OutputKeys;
 
     atomic_bool                     _terminated;
+    string                          _phase;
     atomic_uint                     _finished_tasks;
     condition_variable              _cv;
     int                             _num_of_threads;
@@ -34,15 +36,13 @@ class Graph {
 
     string                          _output_dir;
     vector<output_container>        _outputs;
+    OutputKeys                      _output_keys;
     vector<unique_ptr<Vertex> >     _vertexs; 
-
+    
     void _thread(int i, int threads);
-
+    void _run_phase(string phase);
     public: 
-    Graph(string output_dir): 
-        _terminated(false), 
-        _num_of_threads(thread::hardware_concurrency()),
-        _output_dir(output_dir){};
+    Graph(string output_dir);
 
     void add_vertex(Vertex::ptr vertex_ptr);
     void start_computation();

@@ -4,21 +4,19 @@
 #include <vector>
 #include "vertex.hpp"
 #include <cstdlib>
+#include "position.hpp"
+#include <map>
 
 using namespace std;
 
 class Person : public Vertex {
     private:
-    float _x;
-    float _y;
+    Position<float> _position;
 
     public:
-    vector<output>  _update();
+    vector<output> interact(map<string, vector<ptr> > others);
 
-    Person(): Vertex("Person"){
-        _x = (float) rand()/RAND_MAX;
-        _y = (float) rand()/RAND_MAX;
-    }
+    Person(string id);
 };
 
 #endif

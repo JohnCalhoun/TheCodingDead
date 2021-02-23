@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <map>
 
 using namespace std;
 
@@ -18,8 +19,9 @@ class Vertex {
     typedef string          output_key;
     typedef pair<output_key, output_value> output;
     string label;
+    string id;
 
-    private:
+    protected:
     vector<Edge> edges;
     vector<Edge> edges_to_add;
     vector<Edge> edges_to_remove;
@@ -31,10 +33,12 @@ class Vertex {
     virtual vector<output> _update();
 
     public:
+    virtual vector<output> interact(map<string, vector<ptr> > others);
     void create_edge_to(ptr vertex_ptr);
     void delete_edge_to(ptr vertex_ptr);
-    vector<output>  update();
-    Vertex(string label_name): label(label_name){}
+    void update();
+    virtual vector<output> simulate();
+    Vertex(string id, string label_name);
     virtual ~Vertex() = default;
 };
 
