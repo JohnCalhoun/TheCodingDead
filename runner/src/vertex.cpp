@@ -19,12 +19,15 @@ void Vertex::remove_edge(ptr vertex_ptr){
 
 void Vertex::_update_edges(){
     lock_guard<mutex> guard(this->edge_mutex);
+    for(auto edge: edges_to_add){
+        vertex_groups[edge->label].push_back(edge); 
+    }
     move(edges_to_add.begin(), edges_to_add.end(), back_inserter(edges));
   
     for(auto edge: edges_to_remove){
-        auto i = find(begin(edges), end(edges), edge);
-        if(i != end(this->edges)){
-            this->edges.erase(i);
+        auto i = find(begin(vertex_groups[edge->label]), end(vertex_groups[edge->label]), edge);
+        if(i != end(vertex_groups[edge->label])){
+            vertex_groups[edge->label].erase(i);
         }
     }
     edges_to_add.clear();

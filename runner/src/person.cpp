@@ -7,8 +7,8 @@ using namespace std;
 
 vector<Vertex::output> Person::interact(map<string, vector<Vertex::ptr> > others){
     vector<Vertex::output> out;
-    if(edges.size() > 0){
-        out.push_back(output(edges[0]->id + ":" + label, 1));
+    if(vertex_groups["Room"].size() > 0){
+        out.push_back(output(vertex_groups["Room"][0]->id + ":" + label, 1));
     }
     out.push_back(output(label,1));
     return out;

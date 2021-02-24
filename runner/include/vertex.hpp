@@ -26,6 +26,7 @@ class Vertex {
     vector<Edge> edges_to_add;
     vector<Edge> edges_to_remove;
     mutex edge_mutex;
+    map<string, vector<ptr> > vertex_groups;
 
     void add_edge(ptr vertex_ptr);
     void remove_edge(ptr vertex_ptr);
