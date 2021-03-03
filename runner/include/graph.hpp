@@ -19,34 +19,31 @@
 #include <stdexcept>
 #include <boost/json.hpp>
 #include <unordered_set>
+#include <utility>
 using namespace std;
 
 class Graph {
     private:
     typedef unordered_map<Vertex::output_key, Vertex::output_value> output_container;    
     typedef unordered_set<Vertex::output_key> OutputKeys;
+    typedef unordered_set<unique_ptr<Vertex> > VertexContainer;
 
-    atomic_bool                     _terminated;
     string                          _phase;
-    atomic_uint                     _finished_tasks;
-    condition_variable              _cv;
     int                             _num_of_threads;
-    mutex                           _task_mutex;
-    vector<thread>                  _threads;
 
     string                          _output_dir;
     vector<output_container>        _outputs;
     OutputKeys                      _output_keys;
-    vector<unique_ptr<Vertex> >     _vertexs; 
+    VertexContainer                 _vertexs; 
     
     void _thread(int i, int threads);
     void _run_phase(string phase);
+    float json_value_to_float(boost::json::value value);
     public: 
     Graph(string output_dir);
 
     void add_vertex(Vertex::ptr vertex_ptr);
-    void start_computation();
     void run_iteration(int iteration_number);
-    void stop_computation();
+    void write_output();
     void load(string load_dir);
 };

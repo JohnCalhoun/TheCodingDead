@@ -3,7 +3,6 @@
 #include <string>
 #include <boost/program_options.hpp>
 #include <boost/log/trivial.hpp>
-#include "boost/log/utility/setup.hpp"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -40,11 +39,11 @@ int main(int argc, char *argv[]){
     Graph graph(output_dir);
     graph.load(graph_def);
 
-    graph.start_computation();
     for(int i=0; i<iterations; ++i){
+        cout << "Running Iteration: " << i << endl;
         graph.run_iteration(i);
     }
-    graph.stop_computation();
+    graph.write_output();
     return 0;
 }
 

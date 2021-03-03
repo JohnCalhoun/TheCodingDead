@@ -1,11 +1,15 @@
 #! /bin/bash
-set -x
+set -xe
 
 cd runner
 make 
 cd ..
 
-./bin/run --graph-def-dir ./data/ --output-dir ./output/ --iterations 10
+rm -rf ./output
+mkdir output
+echo "running simulation"
+time ./bin/run --graph-def-dir ./data/ --output-dir ./output/ --iterations 10
 
-./bin/process_output --data-dir ./runner/output/
+echo "combining output"
+./bin/process_output --data-dir ./output
 

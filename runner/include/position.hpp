@@ -3,19 +3,21 @@
 
 #include <vector>
 #include "vertex.hpp"
-#include <cstdlib>
 
 using namespace std;
 
-template<typename T>
 class Position {
     private:
-    T _x;
-    T _y;
+    float _x;
+    float _y;
 
     public:
-    Position(T x, T y): _x(x), _y(y){};
-    Position():_x(0), _y(0){};
+    Position(float x, float y);
+
+    float distance_to(Position &other);
+    float angle_to(Position &other); 
+    void move(float angle, float distance);
+    void clip(float x_max, float y_max);
 };
 
 #endif

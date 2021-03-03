@@ -20,81 +20,76 @@
 #include <boost/json.hpp>
 #include <boost/timer/timer.hpp>
 #include "graph.hpp"
+#include <cstdint>
+#include <iterator>
 using namespace std;
 
-void Graph::_thread(int i, int threads){
-    while(true){    
-        {
-            unique_lock lock(_task_mutex);
-            _cv.wait(lock);
-        }
-        if(_terminated){
-            break;
-        }
-        for(auto it= _vertexs.begin() + i; it < _vertexs.end(); it+=threads){
-            if(_phase == "update"){
-                (*it)->update();
-            }else if(_phase == "simulate"){
-                vector<Vertex::output> out = (*it)->simulate();
-                for(auto x: out){
-                    _outputs[i][x.first] += x.second;
-                }
+void Graph::_thread(int i, int threads){ 
+    size_t chunk_size = _vertexs.size()/threads;
+    auto it=_vertexs.begin();
+    
+    advance(it, chunk_size * i);
+    auto end = it;
+    advance(end, chunk_size);
+
+    while(it != end  && it != _vertexs.end()){
+        if(_phase == "update"){
+            (*it)->update();
+        }else if(_phase == "simulate"){
+            vector<Vertex::output> out = (*it)->simulate();
+            for(auto x: out){
+                _outputs[i][x.first] += x.second;
             }
-            _finished_tasks++;
         }
+        it++;
     }
 }
 
 void Graph::add_vertex(Vertex::ptr vertex_ptr){
-    this->_vertexs.emplace_back(vertex_ptr);
+    this->_vertexs.emplace(vertex_ptr);
 }
 
-void Graph::start_computation(){
-    BOOST_LOG_TRIVIAL(debug) << "starting " << _num_of_threads << " threads"; 
-    for (size_t i = 0; i < _num_of_threads; ++i){
-        _threads.push_back(thread(bind(&Graph::_thread, this, i, _num_of_threads)));
-        _outputs.emplace_back();
-    }
-    this_thread::sleep_for(chrono::milliseconds(500));
-}
 void Graph::_run_phase(string phase){
     BOOST_LOG_TRIVIAL(debug) << "starting phase: " << phase; 
-    _phase=phase;
-    _finished_tasks = 0;
-    int _total_tasks = _vertexs.size();
-
-    _cv.notify_all();
-    while( _total_tasks != _finished_tasks ){
-        this_thread::sleep_for(chrono::nanoseconds(500));
+    vector<thread> threads;
+    _phase = phase;
+    threads.reserve(_num_of_threads);
+    for (size_t i = 0; i < _num_of_threads; ++i){
+        threads.push_back(thread(bind(&Graph::_thread, this, i, _num_of_threads)));
+        _outputs.emplace_back();
+    }
+    for (size_t i = 0; i < _num_of_threads; ++i){
+        threads[i].join();
     }
 }
 void Graph::run_iteration(int iteration_number){  
-    boost::timer::auto_cpu_timer t("Iteration duration: %ws wall, %us user + %ss system = %ts CPU (%p%)\n");
-    _run_phase("update");
-    _run_phase("simulate");
-    
     output_container final_output;
-    for(int i=0; i<_outputs.size(); ++i){
-        for(pair<Vertex::output_key, Vertex::output_value> x: _outputs[i]){
-            final_output[x.first] += x.second;
+    {
+        boost::timer::auto_cpu_timer t("Iteration duration: %ws wall, %us user + %ss system = %ts CPU (%p%)\n");
+        _run_phase("update");
+        _run_phase("simulate");
+        
+        for(int i=0; i<_outputs.size(); ++i){
+            for(pair<Vertex::output_key, Vertex::output_value> x: _outputs[i]){
+                final_output[x.first] += x.second;
+            }
+            _outputs[i].clear();
         }
-        _outputs[i].clear();
     }
-    ostringstream output_file_name;
-    output_file_name << _output_dir << "/" << iteration_number << ".csv";
-    ofstream output_file{output_file_name.str()};
-    for(pair<Vertex::output_key, Vertex::output_value> x: final_output){
-        _output_keys.insert(x.first);
-        output_file << x.first << "," << x.second << endl;
+    {
+        boost::timer::auto_cpu_timer t("Write output duration: %ws wall, %us user + %ss system = %ts CPU (%p%)\n");
+        ostringstream output_file_name;
+        output_file_name << _output_dir << "/" << iteration_number << ".csv";
+        ofstream output_file{output_file_name.str()};
+        for(pair<Vertex::output_key, Vertex::output_value> x: final_output){
+            _output_keys.insert(x.first);
+            output_file << x.first << "," << x.second << endl;
+        }
+        output_file.close();
     }
-    output_file.close();
 }
 
-void Graph::stop_computation(){
-    _terminated = true;
-    _cv.notify_all();
-    for (auto& th : _threads) th.join();
-
+void Graph::write_output(){
     ostringstream output_key_file_name;
     output_key_file_name << _output_dir << "/" << "keys.csv";
 
@@ -107,6 +102,25 @@ void Graph::stop_computation(){
 
 void Graph::load(string load_dir){
     boost::timer::auto_cpu_timer t("Loading duration: %ws wall, %us user + %ss system = %ts CPU (%p%)\n");
+    Person::Initialize();
+    string global_config_file = load_dir + "config.json";
+    BOOST_LOG_TRIVIAL(debug) << "Loading global config from: " << global_config_file;
+    ifstream global_config_stream(global_config_file); 
+    string global_config_content(
+        (istreambuf_iterator<char>(global_config_stream)),
+        (istreambuf_iterator<char>())
+    );
+    boost::json::value global_config = boost::json::parse(global_config_content);
+    boost::json::object transition_probabilities = global_config.at("PersonTransitionProbabilities").as_object();
+    for(auto &from: transition_probabilities){
+        for(auto &to: from.value().as_object()){
+            Person::set_state_transition(
+                Person::string_to_state(from.key_c_str()),
+                Person::string_to_state(to.key_c_str()),
+                to.value().as_double()
+            );
+        }
+    }
     fstream stream;
     vector<string> vertex_files;
     vector<string> edge_files;
@@ -126,6 +140,8 @@ void Graph::load(string load_dir){
     unordered_map<boost::json::string, Vertex::ptr> vertexs_tmp;
     for(auto vertex_file: vertex_files){
         BOOST_LOG_TRIVIAL(debug) << "Loading Vertex File: " << vertex_file;
+
+
         stream.open(vertex_file);
         string line;
         int line_number=0;
@@ -138,8 +154,8 @@ void Graph::load(string load_dir){
                 if(type == "room"){
                     new_vertex =new Room(
                         args.at("id").as_string().data(),
-                        args.at("width").as_double(), 
-                        args.at("height").as_double()
+                        json_value_to_float(args.at("width")),
+                        json_value_to_float(args.at("height"))
                     );
                 }else if(type == "person"){
                     new_vertex =new Person(
@@ -160,6 +176,7 @@ void Graph::load(string load_dir){
         }
         stream.close();
     }
+    
     for(auto edge_file: edge_files){
         BOOST_LOG_TRIVIAL(debug) << "Loading Edge File: " << edge_file;
         stream.open(edge_file);
@@ -168,14 +185,33 @@ void Graph::load(string load_dir){
         while(getline(stream,line)){    
             try {
                 boost::json::value args = boost::json::parse(line);
-                vertexs_tmp.at(
-                    args.at("from").as_string()
-                )->create_edge_to(
-                    vertexs_tmp.at(args.at("to").as_string())
-                );
+                boost::json::string type = args.at("type").as_string();
+
+                if(type == "door"){
+                    Room* room_a = dynamic_cast<Room*>(vertexs_tmp.at(args.at("roomA").as_string()));
+                    Room* room_b = dynamic_cast<Room*>(vertexs_tmp.at(args.at("roomB").as_string()));
+                    room_a->add_door(
+                        json_value_to_float(args.at("roomAx")),  
+                        json_value_to_float(args.at("roomAy")),  
+                        json_value_to_float(args.at("roomBx")),  
+                        json_value_to_float(args.at("roomBy")),  
+                        room_b 
+                    );
+                    room_b->add_door(
+                        json_value_to_float(args.at("roomBx")),  
+                        json_value_to_float(args.at("roomBy")),  
+                        json_value_to_float(args.at("roomAx")),  
+                        json_value_to_float(args.at("roomAy")),  
+                        room_a 
+                    );
+                }else if(type == "in"){
+                    Person* person = dynamic_cast<Person*>(vertexs_tmp.at(args.at("person").as_string()));
+                    Room* room = dynamic_cast<Room*>(vertexs_tmp.at(args.at("room").as_string()));
+                    person->put_in_room(room);
+                }
             }catch(const std::exception& e){
                 BOOST_LOG_TRIVIAL(fatal) << "Edge Failed: "<< e.what() 
-                    << ":" << edge_file << ":" << line_number;
+                    << ":" << edge_file << ":" << line_number << " " << line;
                 throw runtime_error("InvalidEdgeDefinition"); 
             }
             line_number++;
@@ -186,11 +222,34 @@ void Graph::load(string load_dir){
     random_device rd;
     mt19937 g(rd());
     
-    shuffle(_vertexs.begin(), _vertexs.end(), g);
-}
+    seed_seq seq{rd(), rd()};
+    vector<std::uint32_t> seeds;
+    seeds.resize(_vertexs.size());
+    seq.generate(seeds.begin(), seeds.end());
 
+
+    auto vertex_iter = _vertexs.begin();
+    auto seed_iter = seeds.begin();
+    while(vertex_iter != _vertexs.end()){
+        (*vertex_iter)->set_seed(*seed_iter);
+        vertex_iter++;
+        seed_iter++;
+    }
+}
+float Graph::json_value_to_float(boost::json::value value){
+    float out;
+    if(value.is_int64()){
+        out = value.as_int64();
+    }else if(value.is_uint64()){
+        out = value.as_uint64();
+    }else if(value.is_double()){
+        out = value.as_double();
+    }else{
+        throw runtime_error("InvalidType");
+    }
+    return out;
+}
 Graph::Graph(string output_dir): 
-    _terminated(false), 
     _num_of_threads(thread::hardware_concurrency()),
     _output_dir(output_dir){};
 
