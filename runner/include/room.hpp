@@ -26,6 +26,7 @@ class Room : public Vertex {
     vector<output> interact(Vertex::MapToVertexs others);
     vector<Vertex::output>  simulate();
     Room(string id, float width, float height);
+    Room(const Room& source);
     void add_door(float in_x, float in_y, float out_x, float out_y, Room* other);
 };
 

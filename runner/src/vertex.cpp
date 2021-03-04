@@ -34,10 +34,6 @@ vector<Vertex::output> Vertex::_update(){
     return vector<Vertex::output>();
 };
 
-vector<Vertex::output> Vertex::interact(Vertex::MapToVertexs others){
-    return vector<Vertex::output>();
-};
-
 void Vertex::create_edge_to(ptr vertex_ptr){
     add_edge(vertex_ptr);
     vertex_ptr->add_edge(this);

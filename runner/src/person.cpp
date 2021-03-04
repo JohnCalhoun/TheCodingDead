@@ -42,7 +42,7 @@ void Person::Initialize(){
         transition_probabilties.try_emplace(x,Person::all_states.size(), 0.0f);
     }
 }
-vector<Vertex::output> Person::interact(Vertex::MapToVertexs others){
+vector<Vertex::output> Person::interact(){
     vector<Vertex::output> out;
     if(current_room_ptr){
         //out.emplace_back(current_room_ptr->id + ":" + label, 1);

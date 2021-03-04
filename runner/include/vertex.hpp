@@ -37,7 +37,6 @@ class Vertex {
     public:
     void add_edge(ptr vertex_ptr);
     void remove_edge(ptr vertex_ptr);
-    virtual vector<output> interact(MapToVertexs others);
     void create_edge_to(ptr vertex_ptr);
     void delete_edge_to(ptr vertex_ptr);
     void update();

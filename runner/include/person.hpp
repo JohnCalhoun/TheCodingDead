@@ -8,6 +8,7 @@
 #include "room.hpp"
 #include <random> 
 #include "position.hpp"
+#include <boost/random/taus88.hpp>
 
 using namespace std;
 
@@ -26,11 +27,11 @@ class Person : public Vertex {
     float speed;
     Room* current_room_ptr;
     Room::Door* current_door_ptr;
-    mt19937 random_generator;
+    boost::taus88 random_generator;
     void _state_transition();     
 
     public:
-    vector<output> interact(Vertex::MapToVertexs others);
+    vector<output> interact();
     Person(string id);
     void put_in_room(Room *);
     virtual void set_seed(std::uint32_t seed);

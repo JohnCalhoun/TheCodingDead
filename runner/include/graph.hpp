@@ -34,15 +34,15 @@ class Graph {
     string                          _output_dir;
     vector<output_container>        _outputs;
     OutputKeys                      _output_keys;
-    VertexContainer                 _vertexs; 
-    
+    unordered_set<unique_ptr<Person> >      _people; 
+    vector<Room>                            _rooms;
+
     void _thread(int i, int threads);
     void _run_phase(string phase);
     float json_value_to_float(boost::json::value value);
     public: 
     Graph(string output_dir);
 
-    void add_vertex(Vertex::ptr vertex_ptr);
     void run_iteration(int iteration_number);
     void write_output();
     void load(string load_dir);

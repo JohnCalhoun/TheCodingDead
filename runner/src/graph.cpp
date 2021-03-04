@@ -25,28 +25,34 @@
 using namespace std;
 
 void Graph::_thread(int i, int threads){ 
-    size_t chunk_size = _vertexs.size()/threads;
-    auto it=_vertexs.begin();
-    
-    advance(it, chunk_size * i);
-    auto end = it;
-    advance(end, chunk_size);
+    if(_phase == "update"){
+        size_t room_chunk_size = _rooms.size()/threads;
+        auto room_it=_rooms.begin();
+        
+        advance(room_it, room_chunk_size * i);
+        auto room_end = room_it;
+        advance(room_end, room_chunk_size);
 
-    while(it != end  && it != _vertexs.end()){
-        if(_phase == "update"){
-            (*it)->update();
-        }else if(_phase == "simulate"){
-            vector<Vertex::output> out = (*it)->simulate();
+        while(room_it != room_end  && room_it != _rooms.end()){
+            (*room_it).update();
+            room_it++;
+        }
+    }else if(_phase =="simulate"){
+        size_t people_chunk_size = _people.size()/threads;
+        auto people_it=_people.begin();
+        
+        advance(people_it, people_chunk_size * i);
+        auto people_end = people_it;
+        advance(people_end, people_chunk_size);
+
+        while(people_it != people_end  && people_it != _people.end()){
+            vector<Vertex::output> out = (*people_it)->interact();
             for(auto x: out){
                 _outputs[i][x.first] += x.second;
             }
+            people_it++;
         }
-        it++;
     }
-}
-
-void Graph::add_vertex(Vertex::ptr vertex_ptr){
-    this->_vertexs.emplace(vertex_ptr);
 }
 
 void Graph::_run_phase(string phase){
@@ -138,9 +144,9 @@ void Graph::load(string load_dir){
     BOOST_LOG_TRIVIAL(debug) << "Loading Graph Definition from: " << load_dir;
 
     unordered_map<boost::json::string, Vertex::ptr> vertexs_tmp;
+    unordered_map<boost::json::string, size_t> rooms_tmp;
     for(auto vertex_file: vertex_files){
         BOOST_LOG_TRIVIAL(debug) << "Loading Vertex File: " << vertex_file;
-
 
         stream.open(vertex_file);
         string line;
@@ -148,25 +154,28 @@ void Graph::load(string load_dir){
         while(getline(stream,line)){
             try{
                 boost::json::value args = boost::json::parse(line);
-                Vertex* new_vertex;
 
                 boost::json::string type = args.at("type").as_string();
                 if(type == "room"){
-                    new_vertex =new Room(
+                    _rooms.emplace_back(
                         args.at("id").as_string().data(),
                         json_value_to_float(args.at("width")),
                         json_value_to_float(args.at("height"))
                     );
+                    rooms_tmp.emplace(
+                        args.at("id").as_string(),
+                        _rooms.size()-1
+                    );
                 }else if(type == "person"){
-                    new_vertex =new Person(
+                    Person* new_vertex =new Person(
                         args.at("id").as_string().data()
                     );
+                    vertexs_tmp[args.at("id").as_string()] = new_vertex;
+                    _people.emplace(new_vertex);
                 }else{
                     BOOST_LOG_TRIVIAL(fatal) << "unknow vertex type: "<< type;
                     throw runtime_error("InvalidVertexDefinition"); 
                 }
-                vertexs_tmp[args.at("id").as_string()] = new_vertex;
-                add_vertex(new_vertex);
             }catch(const std::exception& e){
                 BOOST_LOG_TRIVIAL(fatal) << "Vertex Failed: "<< e.what() 
                     << ":" << vertex_file << ":" << line_number;
@@ -176,7 +185,7 @@ void Graph::load(string load_dir){
         }
         stream.close();
     }
-    
+    _rooms.shrink_to_fit(); 
     for(auto edge_file: edge_files){
         BOOST_LOG_TRIVIAL(debug) << "Loading Edge File: " << edge_file;
         stream.open(edge_file);
@@ -188,26 +197,25 @@ void Graph::load(string load_dir){
                 boost::json::string type = args.at("type").as_string();
 
                 if(type == "door"){
-                    Room* room_a = dynamic_cast<Room*>(vertexs_tmp.at(args.at("roomA").as_string()));
-                    Room* room_b = dynamic_cast<Room*>(vertexs_tmp.at(args.at("roomB").as_string()));
-                    room_a->add_door(
+                    _rooms[rooms_tmp.at(args.at("roomA").as_string())].add_door(
                         json_value_to_float(args.at("roomAx")),  
                         json_value_to_float(args.at("roomAy")),  
                         json_value_to_float(args.at("roomBx")),  
                         json_value_to_float(args.at("roomBy")),  
-                        room_b 
+                        &_rooms[rooms_tmp.at(args.at("roomB").as_string())]
                     );
-                    room_b->add_door(
+                    _rooms[rooms_tmp.at(args.at("roomB").as_string())].add_door(
                         json_value_to_float(args.at("roomBx")),  
                         json_value_to_float(args.at("roomBy")),  
                         json_value_to_float(args.at("roomAx")),  
                         json_value_to_float(args.at("roomAy")),  
-                        room_a 
+                        &_rooms[rooms_tmp.at(args.at("roomA").as_string())]
                     );
                 }else if(type == "in"){
                     Person* person = dynamic_cast<Person*>(vertexs_tmp.at(args.at("person").as_string()));
-                    Room* room = dynamic_cast<Room*>(vertexs_tmp.at(args.at("room").as_string()));
-                    person->put_in_room(room);
+                    person->put_in_room(
+                        &_rooms[rooms_tmp.at(args.at("room").as_string())]
+                    );
                 }
             }catch(const std::exception& e){
                 BOOST_LOG_TRIVIAL(fatal) << "Edge Failed: "<< e.what() 
@@ -224,15 +232,28 @@ void Graph::load(string load_dir){
     
     seed_seq seq{rd(), rd()};
     vector<std::uint32_t> seeds;
-    seeds.resize(_vertexs.size());
+    seeds.resize(_rooms.size());
     seq.generate(seeds.begin(), seeds.end());
 
 
-    auto vertex_iter = _vertexs.begin();
+    auto room_iter = _rooms.begin();
     auto seed_iter = seeds.begin();
-    while(vertex_iter != _vertexs.end()){
-        (*vertex_iter)->set_seed(*seed_iter);
-        vertex_iter++;
+    while(room_iter != _rooms.end()){
+        (*room_iter).set_seed(*seed_iter);
+        room_iter++;
+        seed_iter++;
+    }
+   
+    seeds.clear();
+    seeds.resize(_people.size());
+    seq.generate(seeds.begin(), seeds.end());
+
+
+    auto people_iter = _people.begin();
+    seed_iter = seeds.begin();
+    while(people_iter != _people.end()){
+        (*people_iter)->set_seed(*seed_iter);
+        people_iter++;
         seed_iter++;
     }
 }
