@@ -42,14 +42,9 @@ void Person::Initialize(){
         transition_probabilties.try_emplace(x,Person::all_states.size(), 0.0f);
     }
 }
-vector<Vertex::output> Person::interact(){
-    vector<Vertex::output> out;
-    if(current_room_ptr){
-        //out.emplace_back(current_room_ptr->id + ":" + label, 1);
-    }
+void Person::interact(){
     if(state == wander){
-        uniform_real_distribution<> distrib(0, boost::math::float_constants::pi);
-        position.move(distrib(random_generator),speed);
+        position.move(random_angle(random_generator),speed);
         position.clip(current_room_ptr->_width,current_room_ptr->_height);
     }else if(state == seek_door){
         if(!current_door_ptr){
@@ -71,16 +66,24 @@ vector<Vertex::output> Person::interact(){
         }
     }
     _state_transition();
-    return out;
 }
 
 void Person::_state_transition(){
     State old_state = state;
-    discrete_distribution<> dist(
-        transition_probabilties.at(state).begin(), 
-        transition_probabilties.at(state).end()
-    );
-    state = all_states[dist(random_generator)];
+
+    float acc=0;
+    int pos;
+    auto it = transition_probabilties.at(state).begin();
+    float x = generate_canonical<float, 10>(random_generator);
+    for(pos =0; pos<transition_probabilties.at(state).size(); pos++){
+        acc+=*it;
+        if( acc > x){
+            break;
+        }
+        it++;
+    }
+    
+    state = all_states[pos];
     if(old_state == State::wander && state != State::wander){
         current_door_ptr = nullptr;
     }
@@ -99,4 +102,15 @@ void Person::set_seed(std::uint32_t seed){
     random_generator.seed(_seed);
 }
 
-Person::Person(string id): Vertex(id, "Person"), state(Person::State::wander), position(0,0), speed(.5), current_room_ptr(nullptr), current_door_ptr(nullptr) {}
+Person::Person(string id): Vertex(id, "Person"), state(Person::State::wander), position(0,0), speed(.5), current_room_ptr(nullptr), current_door_ptr(nullptr), random_angle(0, 2*boost::math::float_constants::pi) {}
+
+Person::Person(const Person& source):
+    Vertex(source.id, "Person"),
+    state(source.state),
+    position(source.position),
+    speed(source.speed),
+    current_room_ptr(source.current_room_ptr),
+    current_door_ptr(source.current_door_ptr),
+    random_generator(source.random_generator),
+    random_angle(0, 2*boost::math::float_constants::pi)
+{};

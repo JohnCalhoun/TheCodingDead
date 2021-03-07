@@ -22,36 +22,20 @@
 #include "graph.hpp"
 #include <cstdint>
 #include <iterator>
+
 using namespace std;
 
 void Graph::_thread(int i, int threads){ 
-    if(_phase == "update"){
-        size_t room_chunk_size = _rooms.size()/threads;
-        auto room_it=_rooms.begin();
-        
-        advance(room_it, room_chunk_size * i);
-        auto room_end = room_it;
-        advance(room_end, room_chunk_size);
+    size_t people_chunk_size = _people.size()/threads;
+    auto people_it=_people.begin();
+    
+    advance(people_it, people_chunk_size * i);
+    auto people_end = people_it;
+    advance(people_end, people_chunk_size);
 
-        while(room_it != room_end  && room_it != _rooms.end()){
-            (*room_it).update();
-            room_it++;
-        }
-    }else if(_phase =="simulate"){
-        size_t people_chunk_size = _people.size()/threads;
-        auto people_it=_people.begin();
-        
-        advance(people_it, people_chunk_size * i);
-        auto people_end = people_it;
-        advance(people_end, people_chunk_size);
-
-        while(people_it != people_end  && people_it != _people.end()){
-            vector<Vertex::output> out = (*people_it)->interact();
-            for(auto x: out){
-                _outputs[i][x.first] += x.second;
-            }
-            people_it++;
-        }
+    while(people_it != people_end  && people_it != _people.end()){
+        (*people_it).interact();
+        people_it++;
     }
 }
 
@@ -72,7 +56,7 @@ void Graph::run_iteration(int iteration_number){
     output_container final_output;
     {
         boost::timer::auto_cpu_timer t("Iteration duration: %ws wall, %us user + %ss system = %ts CPU (%p%)\n");
-        _run_phase("update");
+        //_run_phase("update");
         _run_phase("simulate");
         
         for(int i=0; i<_outputs.size(); ++i){
@@ -143,7 +127,7 @@ void Graph::load(string load_dir){
     }
     BOOST_LOG_TRIVIAL(debug) << "Loading Graph Definition from: " << load_dir;
 
-    unordered_map<boost::json::string, Vertex::ptr> vertexs_tmp;
+    unordered_map<boost::json::string, size_t> vertexs_tmp;
     unordered_map<boost::json::string, size_t> rooms_tmp;
     for(auto vertex_file: vertex_files){
         BOOST_LOG_TRIVIAL(debug) << "Loading Vertex File: " << vertex_file;
@@ -167,11 +151,13 @@ void Graph::load(string load_dir){
                         _rooms.size()-1
                     );
                 }else if(type == "person"){
-                    Person* new_vertex =new Person(
+                    _people.emplace_back(
                         args.at("id").as_string().data()
                     );
-                    vertexs_tmp[args.at("id").as_string()] = new_vertex;
-                    _people.emplace(new_vertex);
+                    vertexs_tmp.emplace(
+                        args.at("id").as_string(),
+                        _people.size()-1
+                    );
                 }else{
                     BOOST_LOG_TRIVIAL(fatal) << "unknow vertex type: "<< type;
                     throw runtime_error("InvalidVertexDefinition"); 
@@ -212,8 +198,7 @@ void Graph::load(string load_dir){
                         &_rooms[rooms_tmp.at(args.at("roomA").as_string())]
                     );
                 }else if(type == "in"){
-                    Person* person = dynamic_cast<Person*>(vertexs_tmp.at(args.at("person").as_string()));
-                    person->put_in_room(
+                    _people[vertexs_tmp.at(args.at("person").as_string())].put_in_room(
                         &_rooms[rooms_tmp.at(args.at("room").as_string())]
                     );
                 }
@@ -252,7 +237,7 @@ void Graph::load(string load_dir){
     auto people_iter = _people.begin();
     seed_iter = seeds.begin();
     while(people_iter != _people.end()){
-        (*people_iter)->set_seed(*seed_iter);
+        (*people_iter).set_seed(*seed_iter);
         people_iter++;
         seed_iter++;
     }
@@ -270,6 +255,7 @@ float Graph::json_value_to_float(boost::json::value value){
     }
     return out;
 }
+
 Graph::Graph(string output_dir): 
     _num_of_threads(thread::hardware_concurrency()),
     _output_dir(output_dir){};

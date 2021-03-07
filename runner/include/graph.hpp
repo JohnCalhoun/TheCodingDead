@@ -20,6 +20,7 @@
 #include <boost/json.hpp>
 #include <unordered_set>
 #include <utility>
+
 using namespace std;
 
 class Graph {
@@ -34,12 +35,13 @@ class Graph {
     string                          _output_dir;
     vector<output_container>        _outputs;
     OutputKeys                      _output_keys;
-    unordered_set<unique_ptr<Person> >      _people; 
-    vector<Room>                            _rooms;
+    vector<Room>                    _rooms;
+    vector<Person>                  _people; 
 
     void _thread(int i, int threads);
     void _run_phase(string phase);
     float json_value_to_float(boost::json::value value);
+    
     public: 
     Graph(string output_dir);
 

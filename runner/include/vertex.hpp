@@ -32,7 +32,6 @@ class Vertex {
     std::uint32_t       _seed;
     
     void _update_edges();
-    virtual vector<output> _update();
 
     public:
     void add_edge(ptr vertex_ptr);

@@ -2,4 +2,5 @@ data
 output
 obj
 node_modules
-
+*.DSYM
+tmp

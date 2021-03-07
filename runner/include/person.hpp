@@ -9,6 +9,7 @@
 #include <random> 
 #include "position.hpp"
 #include <boost/random/taus88.hpp>
+#include <boost/math/constants/constants.hpp>
 
 using namespace std;
 
@@ -29,10 +30,12 @@ class Person : public Vertex {
     Room::Door* current_door_ptr;
     boost::taus88 random_generator;
     void _state_transition();     
+    uniform_real_distribution<> random_angle;
 
     public:
-    vector<output> interact();
+    void interact();
     Person(string id);
+    Person(const Person& source);
     void put_in_room(Room *);
     virtual void set_seed(std::uint32_t seed);
     static void Initialize();
