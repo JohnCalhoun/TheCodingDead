@@ -1,7 +1,7 @@
 .PHONY: clean
 
-COMPILE_OPTS = -std=c++17 -DBOOST_LOG_DYN_LINK -Wall -Ofast -Iinclude 
-LINK_OPTS = -lstdc++ -lboost_program_options -lboost_log-mt -lboost_log_setup-mt -lboost_json -lboost_timer
+COMPILE_OPTS = -std=c++17 -DBOOST_LOG_DYN_LINK -Wall -Ofast -Iinclude -march=native
+LINK_OPTS = -lstdc++ -lboost_program_options -lboost_log -lboost_log_setup -lboost_json -lboost_timer -lm -lpthread
 
 all : ../bin/run  ../bin/process_output
 

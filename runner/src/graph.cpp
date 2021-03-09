@@ -59,7 +59,7 @@ void Graph::run_iteration(int iteration_number){
         //_run_phase("update");
         _run_phase("simulate");
         
-        for(int i=0; i<_outputs.size(); ++i){
+        for(size_t i=0; i<_outputs.size(); ++i){
             for(pair<Vertex::output_key, Vertex::output_value> x: _outputs[i]){
                 final_output[x.first] += x.second;
             }

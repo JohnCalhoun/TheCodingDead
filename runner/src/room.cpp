@@ -24,10 +24,10 @@ void Room::add_door(float in_x, float in_y, float out_x, float out_y,  Room* oth
 
 Room::Room(string id, float width, float height): Vertex(id, "Room"), _width(width), _height(height){};
 Room::Room(const Room& source):
-    _height(source._height),
-    _width(source._width),
+    Vertex(source.id, "Room"),
     doors(source.doors),
-    Vertex(source.id, "Room")
+    _width(source._width),
+    _height(source._height)
 {};
 
 Room::Door::Door(float in_x, float in_y, float out_x, float out_y, Room* other): 

@@ -30,7 +30,7 @@ class Graph {
     typedef unordered_set<unique_ptr<Vertex> > VertexContainer;
 
     string                          _phase;
-    int                             _num_of_threads;
+    size_t                          _num_of_threads;
 
     string                          _output_dir;
     vector<output_container>        _outputs;

@@ -17,7 +17,7 @@ map<Person::State, vector<float> > Person::transition_probabilties = {
 };
 
 void Person::set_state_transition(Person::State from, Person::State to, float value){
-    int i;
+    vector<Person::State>::size_type  i;
     for(i=0; i<Person::all_states.size(); ++i){
         if(Person::all_states[i] == to){
             break;
@@ -72,7 +72,7 @@ void Person::_state_transition(){
     State old_state = state;
 
     float acc=0;
-    int pos;
+    vector<float>::size_type pos;
     auto it = transition_probabilties.at(state).begin();
     float x = generate_canonical<float, 10>(random_generator);
     for(pos =0; pos<transition_probabilties.at(state).size(); pos++){
